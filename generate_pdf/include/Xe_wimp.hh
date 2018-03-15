@@ -39,9 +39,9 @@ public:
   };
 
 
-  double GetRate(PdfCollection&pdfs, double mChi, double sigma0Si, DetectorEfficiency* Efficiency){
+  void GetRate(PdfCollection&pdfs, double mChi, double sigma0Si, DetectorEfficiency* Efficiency){
 
-
+    
     for(int i=1; i<=pdfs.hEnergy->GetNbinsX(); ++i){
 
       double Er = pdfs.hEnergy->GetXaxis()->GetBinCenter(i);
@@ -52,6 +52,8 @@ public:
       pdfs.hEnergy->SetBinContent(i, rate);
       
     }
+
+    
   }
   
   

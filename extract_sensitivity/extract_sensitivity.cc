@@ -35,27 +35,38 @@
 #include "RooDataHist.h"
 #include "RooPlot.h"
 #include "RooHistPdf.h"
+#include "RooDataSet.h"
+#include "RooFitResult.h"
 
-
-#include "../GlobalParameters.hh"
-
+//----------------------------------------------------
+//----------------------------------------------------
+#include "GlobalParameters.hh"
 #include "ModelBuilder.hh"
-
-
-
+//----------------------------------------------------
+//----------------------------------------------------
 
 using namespace std;
 
-
-
-
+//----------------------------------------------------
+//----------------------------------------------------
 int main(int argc,char** argv){
   
   //----------------------------------------------------
   //----------------------------------------------------
   TApplication theApp("App", &argc, argv);
 
+  double TotalExpousre = 1; // ton.year
+  int N_pseudo_exp = 100;
+  int vervose_level = -1;
+  vector<double> sigma_test = {0.01, 0.1, 1};
 
+  
+  vector<TH1D*> hq;
+  for(size_t i=0; i< sigma_test.size(); ++i){
+    hq.push_back(new TH1D("","",1000,-1,10));
+  }
+
+  
   //----------------------------------------------------
   // Global parameters
   //----------------------------------------------------  
@@ -65,7 +76,7 @@ int main(int argc,char** argv){
   // Set the observables variables
   //----------------------------------------------------
   RooRealVar E_recoil("E_recoil","E_recoil",parameters->E_min, 100) ;
-  RooRealVar s1("s1", "s1", 0, parameters->s1_max) ;
+  RooRealVar s1("s1", "s1 [npe]", 0, parameters->s1_max) ;
   RooRealVar s2("s2", "s2", 0, parameters->s2_max) ;
   RooRealVar logs2s1("logs2s1", "logs2s1", parameters->logs2s1_min, parameters->logs2s1_max) ;
 
@@ -74,51 +85,120 @@ int main(int argc,char** argv){
   variables["s1"]       = &s1;
   variables["s2"]       = &s2;
   variables["logs2s1"]  = &logs2s1;
-  
 
-  ModelBuilder* signal = new ModelBuilder(&variables);
-  signal->AddComponant("../generate_pdf/pdf/wimp_100.root","s1_s2_wimp_100", RooArgList(s1, s2));
-  
-  
+  string analysis_variables = "s1,logs1s2";
 
-  ModelBuilder* background = new ModelBuilder(&variables);
-  
+  //ModelBuilder* signal = new ModelBuilder("Signal", analysis_variables, &variables);
+  //signal->AddComponant("wimp","../generate_pdf/pdf/wimp_100_GeV_100_Vcm.root", "s1_logs1s2", RooArgList(s1, logs2s1));  
+  //signal->BuildPdf();
+  //RooAddPdf* sinal_pdf = signal->GetPdf();
 
+  ModelBuilder* background = new ModelBuilder("Background", analysis_variables,  &variables);
+  background->AddComponant("NR_neutrino","../generate_pdf/pdf/neutrino_NR_100_Vcm.root", "s1_logs1s2", RooArgList(s1, logs2s1));
+  background->AddComponant("ER_Flat", "../generate_pdf/pdf/flat_ER_100Vcm.root", "s1_logs1s2", RooArgList(s1, logs2s1));
+  background->AddComponant("wimp","../generate_pdf/pdf/wimp_100_GeV_100_Vcm.root", "s1_logs1s2", RooArgList(s1, logs2s1));
+  background->BuildPdf();
 
-  
-
-
-  
-  
-
-  TFile* f = TFile::Open("../generate_pdf/pdf/wimp_100.root");
-  
+  RooAddPdf* background_pdf = background->GetPdf();
 
 
   
- 
-  TH2D* histo = (TH2D*) f->Get("s1_s2_wimp_100");
+  
+  for(int n =0; n <N_pseudo_exp; ++n){
+       
+    //----------------------------------------------------
+    // Generate data without WIMP
+    //----------------------------------------------------
+    background->GetAmplitude("wimp")->setVal(0);
+    RooDataSet *dataBkgOnly = background->GenerateFakeData(TotalExpousre, RooArgList(s1, logs2s1));
+
+    //----------------------------------------------------
+    // Fit un constrain Likelyhood
+    //----------------------------------------------------    
+    background->GetAmplitude("wimp")->setConstant(kFALSE);
+    RooFitResult* fit_unconstrain = background_pdf->fitTo(*dataBkgOnly,
+							  RooFit::Extended(kTRUE),
+							  RooFit::PrintLevel(vervose_level),
+							  RooFit::Save());
+
+    double lnL_unconstrain = fit_unconstrain->minNll();
+    
+    //----------------------------------------------------
+    // Loop over all the test cross sections
+    //----------------------------------------------------
+    for(size_t i = 0 ; i< sigma_test.size(); i++){
+      
+      background->GetAmplitude("wimp")->setVal(sigma_test[i]);   
+      background->GetAmplitude("wimp")->setConstant(kTRUE);
+      RooFitResult* fit_constrain = background_pdf->fitTo(*dataBkgOnly,
+							  RooFit::Extended(kTRUE),
+							  RooFit::PrintLevel(vervose_level),
+							  RooFit::Save());
+      
+      double lnL_constrain = fit_constrain->minNll();
+      
+
+      double q = 2*(lnL_constrain - lnL_unconstrain);
+      
+      cout << n+1 << " / " << N_pseudo_exp << " --> " << q << endl;
+      //background->GetAmplitude("wimp")->Print();
+
+    
+      hq[i]->Fill(q);
+
+    }
+    
+
+    /*
+    if(n==100000){
+      
+      TH2D* hh_pdf = (TH2D*)data->createHistogram("s1,logs2s1",500,500) ;
+      
+      TCanvas* c2 = new TCanvas;
+      hh_pdf->Draw("colz") ;
+  
+      c2->Update();
+      
+      
+      TCanvas* c3 = new TCanvas;
+      RooPlot* mesframe = s1.frame() ;
+      data->plotOn(mesframe) ;
+      background_pdf->plotOn(mesframe) ;
+      background_pdf->plotOn(mesframe,
+			     RooFit::Components( *(background->GetExtendPdf("ER_Flat"))),
+			     RooFit::LineStyle(kDashed));
+      
+      background_pdf->plotOn(mesframe,
+			     RooFit::Components( *(background->GetExtendPdf("NR_neutrino"))),
+			     RooFit::LineStyle(kDashed));
+      
+      background_pdf->plotOn(mesframe,
+			     RooFit::Components( *(background->GetExtendPdf("wimp"))),
+			     RooFit::LineStyle(kDashed),
+			     RooFit::LineColor(kRed));
+      mesframe->Draw() ;
+      c3->Update();
+      }*/
+  }
+  
 
   
-  RooDataHist data("bdata","bdata",RooArgList(s1,s2), histo);
+  TCanvas* c = new TCanvas;
+  c->Divide(sigma_test.size(),1);
+  for(size_t i =0; i< sigma_test.size(); ++i){
+    c->cd(i+1);
+    hq[i]->Draw();
+  }
+  
+  //hq->Draw();
+  c->Update();
 
-  RooHistPdf dataPdf("name","title",RooArgList(s1, s2), data);
+  
 
-
-
-  RooPlot* s1frame = s1.frame();
-  data.plotOn(s1frame);
-  s1frame->Draw();
-
-
-  RooPlot* s2frame = s2.frame();
-  data.plotOn(s2frame);
-  s2frame->Draw();
-
-
-
+  
+  
   cout<<"Done "<<endl;
-  //theApp.Run();
+  theApp.Run();
 
   
 } 

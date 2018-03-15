@@ -1,16 +1,10 @@
-#ifndef GlobalParameters_hh
-#define GlobalParameters_hh 1
+#include <math.h>
+#include <cmath>
 
+#include "GlobalParameters.hh"
 
-class GlobalParameters{
+GlobalParameters::GlobalParameters(){
 
-public:
-
-  static GlobalParameters* GetInstance(){ return (!instance) ? instance = new GlobalParameters() : instance; }
-  
-private:
-
-  GlobalParameters(){
 
     E_log_scale_bins = new double[E_nbins];
     
@@ -19,39 +13,10 @@ private:
     double binwidth = (logxmax-logxmin)/(double)E_nbins;
     E_log_scale_bins[0] = E_min;
     for (int i = 1 ; i <= E_nbins ; i++) E_log_scale_bins[i] = E_min + pow(10, logxmin + i * binwidth);
-    
-    
-  }
-
-  ~GlobalParameters(){}
-
-  
-  static  GlobalParameters* instance;
-
-  
-public:
-
-  static const int    E_nbins;
-  static const double E_min;
-  static const double E_max;
-
-  static const bool   is_E_log_scale;
-  double* E_log_scale_bins;
-  
-    
-  static const int    s1_nbins;
-  static const double s1_max;
-  
-  static const int    s2_nbins;
-  static const double s2_max;
-    
-  static const int    logs2s1_nbins;
-  static const double logs2s1_min;
-  static const double logs2s1_max;
- 
 
 
-};
+}
+
 
 GlobalParameters* GlobalParameters::instance = nullptr;
 
@@ -67,9 +32,8 @@ const int GlobalParameters::s2_nbins = 1000;
 const double GlobalParameters::s2_max = 100000;
 
 const int GlobalParameters::logs2s1_nbins = 1000;
-const double GlobalParameters::logs2s1_min = 1;
+const double GlobalParameters::logs2s1_min = 0;
 const double GlobalParameters::logs2s1_max = 4;
 
 
   
-#endif

@@ -10,21 +10,14 @@ cmake_minimum_required(VERSION 2.6)
 project(SoftAnalysis)
 
 ###############        Root include/lib dir        #####################
-find_package(ROOT REQUIRED COMPONENTS RooStats)
-
+find_package(ROOT REQUIRED MathMore)
 include_directories(${ROOT_INCLUDE_DIRS})
-
 link_directories( ${ROOT_LIBRARY_DIR})
-
 ########################################################################
 
 ###############        NEST include/lib dir        #####################
-include_directories ($ENV{NESTPATH})
-
-link_directories($ENV{NESTPATH})
-
-
-
+find_package(NEST REQUIRED)
+include_directories(${NEST_INCLUDE_DIRS}/include)
 ########################################################################
 
 
@@ -35,6 +28,7 @@ include_directories ($ENV{TOOLS_PATH}/common/include)
 include_directories ($ENV{TOOLS_PATH}/Detectors/include)
 
 link_directories($ENV{TOOLS_PATH}/lib)
+########################################################################
 
 
 ########################################################################
@@ -52,8 +46,6 @@ IF(${APPLE})
   set (CMAKE_CXX_FLAGS "-std=c++0x  -g3 -Wall -O0")
 ENDIF(${APPLE})
 ########################################################################
-
-
 
 #######   Check the compiler and set the compile and link flags  #######
 set(CMAKE_BUILD_TYPE Debug)
@@ -98,25 +90,31 @@ endif (CMAKE_SYSTEM_NAME MATCHES Darwin)
 
 ########################################################################
 
+####################### Application sources ############################
+file( GLOB  APP_SOURCES RELATIVE "${CMAKE_BINARY_DIR}" "*.cc" )
+########################################################################
+
+
+########################################################################
 include_directories (${CMAKE_BINARY_DIR}/include)
 include_directories(${CMAKE_BINARY_DIR}/ressources)
 include_directories(${CMAKE_BINARY_DIR})
-
-file( GLOB  APP_SOURCES RELATIVE "${CMAKE_BINARY_DIR}" "*.cc" )
-
-file(GLOB sources ${CMAKE_BINARY_DIR}/src/*.cc)
-file(GLOB headers ${CMAKE_BINARY_DIR}/include/*.hh)
-file(GLOB ressources ${CMAKE_BINARY_DIR}/ressources/*.hg)
-
 ########################################################################
 
+########################################################################
+file(GLOB sources ${CMAKE_BINARY_DIR}/src/*.cc)
+file(GLOB headers ${CMAKE_BINARY_DIR}/include/*.hh)
+file(GLOB ressources ${CMAKE_BINARY_DIR}/ressources/*.hh)
+########################################################################
+
+########################################################################
 foreach( testsourcefile ${APP_SOURCES} )
 
     string( REPLACE ".cc" ".bin" testname ${testsourcefile} )
 
     add_executable( ${testname} ${testsourcefile}  ${sources} ${headers})
 
-    target_link_libraries( ${testname} ${ROOT_LIBRARIES}  dm_calc NEST MathMore )
+    target_link_libraries( ${testname} ${ROOT_LIBRARIES}  dm_calc ${NEST_LIBRARIES}  )
     
 endforeach( testsourcefile ${APP_SOURCES} )
 ########################################################################
