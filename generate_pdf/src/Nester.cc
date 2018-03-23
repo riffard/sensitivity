@@ -1,4 +1,6 @@
 #include "Nester.hh"
+#include "TestSpectra.hh"
+
 
 
 
@@ -21,11 +23,17 @@ Nester::Nester(string detector_name){
 
 
   fNEST = NEST::NESTcalc();
-    
+
+  fSeed = 0;
+  fNEST.SetRandomSeed(fSeed);
+
   frho = -1;
   fdvD = -1;
   
   gasGap_cm = gasGap_mm / 10.;
+
+
+  
 }
 //----------------------------------------------------
 //----------------------------------------------------
@@ -124,12 +132,12 @@ void Nester::InitLuxRun4TB1(){
   //Drift electric field as function of Z in mm
   //The coefficients for a quintic poly, in rising order
   //efpoly[6] = {0, 0, 0, 0, 0, 0}; // in V/cm
-  efpoly[0] = 0;
-  efpoly[1] = 0;
-  efpoly[2] = 0;
-  efpoly[3] = 0;
-  efpoly[4] = 0;
-  efpoly[5] = 0;
+  efpoly[0] = 126.120812197;
+  efpoly[1] = -1.90341778291;
+  efpoly[2] = 0.0221484569642;
+  efpoly[3] = -9.87866796872e-5;
+  efpoly[4] = 2.0828842974e-7;
+  efpoly[5] = -1.57249357722e-10;
 
   // Ionization and Secondary Scintillation (S2) parameters
   g1_gas = 0.08845; //phd per S2 photon in gas, used to get SE size
@@ -185,12 +193,12 @@ void Nester::InitLuxRun4TB2(){
   //Drift electric field as function of Z in mm
   //The coefficients for a quintic poly, in rising order
   //efpoly[6] = {0, 0, 0, 0, 0, 0}; // in V/cm
-  efpoly[0] = 0;
-  efpoly[1] = 0;
-  efpoly[2] = 0;
-  efpoly[3] = 0;
-  efpoly[4] = 0;
-  efpoly[5] = 0;
+  efpoly[0] = 147.431375761;
+  efpoly[1] = -3.03129014586;
+  efpoly[2] = 0.0343192819835;
+  efpoly[3] = -0.000156379508552;
+  efpoly[4] = 3.31145682998e-7;
+  efpoly[5] = -2.50628583785e-10;
 
   // Ionization and Secondary Scintillation (S2) parameters
   g1_gas = 0.08708; //phd per S2 photon in gas, used to get SE size
@@ -246,12 +254,12 @@ void Nester::InitLuxRun4TB3(){
   //Drift electric field as function of Z in mm
   //The coefficients for a quintic poly, in rising order
   //efpoly[6] = {0, 0, 0, 0, 0, 0}; // in V/cm
-  efpoly[0] = 0;
-  efpoly[1] = 0;
-  efpoly[2] = 0;
-  efpoly[3] = 0;
-  efpoly[4] = 0;
-  efpoly[5] = 0;
+  efpoly[0] = 103.47236631;
+  efpoly[1] = -1.82104229385;
+  efpoly[2] = 0.0222141312792;
+  efpoly[3] = -0.000105722325686;
+  efpoly[4] = 2.38267089834e-7;
+  efpoly[5] = -1.87687319572e-10;
 
   // Ionization and Secondary Scintillation (S2) parameters
   g1_gas = 0.086; //phd per S2 photon in gas, used to get SE size
@@ -309,12 +317,12 @@ void Nester::InitLuxRun4TB4(){
   //Drift electric field as function of Z in mm
   //The coefficients for a quintic poly, in rising order
   //efpoly[6] = {0, 0, 0, 0, 0, 0}; // in V/cm
-  efpoly[0] = 0;
-  efpoly[1] = 0;
-  efpoly[2] = 0;
-  efpoly[3] = 0;
-  efpoly[4] = 0;
-  efpoly[5] = 0;
+  efpoly[0] = 212.716223709;
+  efpoly[1] = -5.0145653897;
+  efpoly[2] = 0.0514514976033;
+  efpoly[3] = -0.000224872819366;
+  efpoly[4] = 4.6123475598e-7;
+  efpoly[5] = -3.42069868433e-10;
 
   // Ionization and Secondary Scintillation (S2) parameters
   g1_gas = 0.08473; //phd per S2 photon in gas, used to get SE size
@@ -345,10 +353,11 @@ void Nester::InitLuxRun4TB4(){
 void Nester::GetNestedPdf(PdfCollection& pdfs, int Nevent, string pt, double field){
   
   INTERACTION_TYPE type_num;
-  if (pt =="DD" || pt =="NR"){
+  if (pt =="NR"){
     type_num = NR;
-  }
-  else if (pt =="CH3T" || pt == "ER"){
+  }else if(pt =="DD"){
+    type_num = DD;
+  }else if (pt =="CH3T" || pt == "ER"){
     type_num = beta;
   }
   else{
@@ -370,8 +379,22 @@ void Nester::GetNestedPdf(PdfCollection& pdfs, int Nevent, string pt, double fie
   double dz_min = liquidBorder - fdvD * dt_max; // ditto
 
   for(int i=0; i<Nevent; i++){
+
+    if(i % 100000 == 0){
+      fSeed ++ ;
+      fNEST.SetRandomSeed(fSeed);
+    }
     
-    double energy = pdfs.hEnergy->GetRandom();
+    double energy = 0;
+    if(pt =="DD"){
+
+      double eMin = 0;
+      double eMax = 100;
+      energy = DD_spectrum(eMin, eMax, fNEST);
+
+      pdfs.hEnergy->Fill(energy);
+      
+    }else energy = pdfs.hEnergy->GetRandom();
 
     double pos_z = ( dz_min + ( dz_max - dz_min ) * fNEST.rand_uniform() ) * 0.1; //cm
     

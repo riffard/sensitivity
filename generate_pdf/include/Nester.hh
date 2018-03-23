@@ -22,6 +22,7 @@ public:
   void GetNestedPdf(PdfCollection& pdfs, int Nevent, string pt, double field);
 
   
+  NEST::NESTcalc* GetNEST(){return &fNEST;};
   
 private:
 
@@ -30,13 +31,13 @@ private:
   void InitLuxRun4TB2();
   void InitLuxRun4TB3();
   void InitLuxRun4TB4();
-  
+
     
   string fDetectorName;
   
   NEST::NESTcalc fNEST;
   
-
+  int fSeed;
   double frho, fdvD, gasGap_cm;
   
   //----------------------------------------------------

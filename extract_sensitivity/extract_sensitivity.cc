@@ -38,10 +38,14 @@
 #include "RooDataSet.h"
 #include "RooFitResult.h"
 
+#include "Math/PdfFuncMathCore.h"
+
 //----------------------------------------------------
 //----------------------------------------------------
 #include "GlobalParameters.hh"
 #include "ModelBuilder.hh"
+#include "Style.hh"
+
 //----------------------------------------------------
 //----------------------------------------------------
 
@@ -50,22 +54,29 @@ using namespace std;
 //----------------------------------------------------
 //----------------------------------------------------
 int main(int argc,char** argv){
-  
+  LoadStyle();
   //----------------------------------------------------
   //----------------------------------------------------
   TApplication theApp("App", &argc, argv);
 
   double TotalExpousre = 1; // ton.year
-  int N_pseudo_exp = 100;
+  int N_pseudo_exp = 400;
   int vervose_level = -1;
-  vector<double> sigma_test = {0.01, 0.1, 1};
+  //vector<double> sigma_test = {0, 5, 10, 20, 25, 30};
+  vector<double> sigma_test = {0, 5, 10, 20, 22, 25, 30, 40};
+  //vector<double> sigma_test = {0, 5};
 
+  vector<vector<double>> q_collection;
   
   vector<TH1D*> hq;
   for(size_t i=0; i< sigma_test.size(); ++i){
-    hq.push_back(new TH1D("","",1000,-1,10));
-  }
+    hq.push_back(new TH1D("","",100,-1,10));
 
+    q_collection.push_back(vector<double> ());
+
+  }
+  TH1D* hmu_estimator = new TH1D("","",10000,-10, 40);
+  
   
   //----------------------------------------------------
   // Global parameters
@@ -101,10 +112,14 @@ int main(int argc,char** argv){
 
   RooAddPdf* background_pdf = background->GetPdf();
 
-
+  RooMsgService::instance().getStream(1).removeTopic(RooFit::Minimization);
+  RooMsgService::instance().getStream(1).removeTopic(RooFit::DataHandling);
   
+  cout<<endl<<"Start pseudo experiments"<<endl<<endl;;
   
   for(int n =0; n <N_pseudo_exp; ++n){
+
+    cout << n+1 << " / " << N_pseudo_exp << endl;
        
     //----------------------------------------------------
     // Generate data without WIMP
@@ -121,6 +136,8 @@ int main(int argc,char** argv){
 							  RooFit::PrintLevel(vervose_level),
 							  RooFit::Save());
 
+    hmu_estimator->Fill(background->GetAmplitude("wimp")->getVal());
+
     double lnL_unconstrain = fit_unconstrain->minNll();
     
     //----------------------------------------------------
@@ -128,7 +145,7 @@ int main(int argc,char** argv){
     //----------------------------------------------------
     for(size_t i = 0 ; i< sigma_test.size(); i++){
       
-      background->GetAmplitude("wimp")->setVal(sigma_test[i]);   
+      background->GetAmplitude("wimp")->setVal(sigma_test[i]);
       background->GetAmplitude("wimp")->setConstant(kTRUE);
       RooFitResult* fit_constrain = background_pdf->fitTo(*dataBkgOnly,
 							  RooFit::Extended(kTRUE),
@@ -140,61 +157,81 @@ int main(int argc,char** argv){
 
       double q = 2*(lnL_constrain - lnL_unconstrain);
       
-      cout << n+1 << " / " << N_pseudo_exp << " --> " << q << endl;
-      //background->GetAmplitude("wimp")->Print();
 
-    
       hq[i]->Fill(q);
-
+      q_collection[i].push_back(q);
     }
-    
+    //----------------------------------------------------
+    //----------------------------------------------------
 
-    /*
-    if(n==100000){
-      
-      TH2D* hh_pdf = (TH2D*)data->createHistogram("s1,logs2s1",500,500) ;
-      
-      TCanvas* c2 = new TCanvas;
-      hh_pdf->Draw("colz") ;
-  
-      c2->Update();
-      
-      
-      TCanvas* c3 = new TCanvas;
-      RooPlot* mesframe = s1.frame() ;
-      data->plotOn(mesframe) ;
-      background_pdf->plotOn(mesframe) ;
-      background_pdf->plotOn(mesframe,
-			     RooFit::Components( *(background->GetExtendPdf("ER_Flat"))),
-			     RooFit::LineStyle(kDashed));
-      
-      background_pdf->plotOn(mesframe,
-			     RooFit::Components( *(background->GetExtendPdf("NR_neutrino"))),
-			     RooFit::LineStyle(kDashed));
-      
-      background_pdf->plotOn(mesframe,
-			     RooFit::Components( *(background->GetExtendPdf("wimp"))),
-			     RooFit::LineStyle(kDashed),
-			     RooFit::LineColor(kRed));
-      mesframe->Draw() ;
-      c3->Update();
-      }*/
+  }
+
+  TGraph* gr_chi2 = new TGraph();
+  gr_chi2->SetLineColor(12);
+  gr_chi2->SetLineWidth(3);
+  for(int b=1; b<=hq[0]->GetNbinsX(); b++){
+    double x = hq[0]->GetBinCenter(b);
+    gr_chi2->SetPoint(gr_chi2->GetN(), x , ROOT::Math::chisquared_pdf(x,1));
   }
   
-
   
-  TCanvas* c = new TCanvas;
-  c->Divide(sigma_test.size(),1);
-  for(size_t i =0; i< sigma_test.size(); ++i){
-    c->cd(i+1);
-    hq[i]->Draw();
+  
+  vector<double> median_collection;
+  for(size_t i = 0 ; i< sigma_test.size(); i++){
+    median_collection.push_back(TMath::Median(q_collection[i].size(), &q_collection[i][0]));
+    hq[i]->Scale(1/hq[i]->Integral("width"));
+
+    for(int b=1; b<=hq[i]->GetNbinsX(); b++) hq[i]->SetBinError(b, 0);
+    
+  }
+      
+  hq[0]->SetLineWidth(3);
+  hq[0]->SetLineColor(10);
+  hq[0]->SetFillColorAlpha(10, 0.5);
+
+  TLine* line = new TLine();
+  line->SetLineWidth(3);
+
+  TGraph* gr_pvalue = new TGraph();
+  
+  for(size_t i =1; i< sigma_test.size(); ++i){
+
+
+    int bin_median = hq[0]->GetXaxis()->FindBin(median_collection[i]);
+    gr_pvalue->SetPoint(gr_pvalue->GetN(), sigma_test[i], hq[0]->Integral(bin_median, hq[0]->GetNbinsX(), "width"));
+
+    
+    hq[i]->SetLineWidth(3);
+    hq[i]->SetLineColor(11);
+    hq[i]->SetFillColorAlpha(11, 0.5);
+
+    
+    THStack* hs = new THStack;
+    hs->Add(hq[i]);
+    hs->Add(hq[0]);
+    
+    TCanvas* c = new TCanvas;
+    hs->Draw("nostack");
+    gr_chi2->Draw("samel");
+    hs->SetTitle("");
+    c->SetLogy();
+
+    line->DrawLine(median_collection[i], 0, median_collection[i], hq[i]->GetMaximum());
+
+    c->Update();
   }
   
   //hq->Draw();
+
+  TCanvas* c = new TCanvas;
+  hmu_estimator->Draw();
   c->Update();
-
   
-
+  
+  gr_pvalue->SetMarkerStyle(21);
+  c = new TCanvas;
+  gr_pvalue->Draw("apl");
+  c->Update();
   
   
   cout<<"Done "<<endl;

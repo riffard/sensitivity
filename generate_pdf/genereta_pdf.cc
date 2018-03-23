@@ -78,22 +78,29 @@ int main(int argc,char** argv){
   // General parameters
   //----------------------------------------------------
   string output_path = "pdf";
-  int N_nevent_generation = 10000000;
+  int N_nevent_generation = 1000000; //10000000;
   double sigma0Si = 1e-45;    // cm^2
   double low_E_th = 1;        // keV
-
   
-  vector<double> fields = {100, 270, 350}; // V/cm
-  //vector<double> fields = {100}; // V/cm
+  
+  //vector<double> fields = {100, 270, 350}; // V/cm
+  vector<double> fields = {100}; // V/cm
 
   
   //----------------------------------------------------
   // Signal: WIMP parameters
   //----------------------------------------------------
   bool build_wimp = true;
-  vector<double> wimp_masses = {50, 100, 500, 1000};
+  vector<double> wimp_masses = {10, 50, 100, 500, 1000};
   //vector<double> wimp_masses = {500};
   
+
+
+  //----------------------------------------------------
+  // Calibration: DD gun NR parameters
+  //----------------------------------------------------
+  bool build_DD_gun_NR = false;
+  int N_nevent_generation_DD_gun = 1000000;
   //----------------------------------------------------
   // Background: Neutrino NR parameters
   //----------------------------------------------------
@@ -172,7 +179,7 @@ int main(int argc,char** argv){
     for(size_t i=0; i<wimp_masses.size(); ++i){
       for(size_t ifield = 0; ifield < fields.size(); ++ifield){
 
-	cout<<"    - m_WIMP = "<< wimp_masses[i] << " GeV, " << fields[ifield] <<" V/cm and csx = "<< sigma0Si <<" cm^2  --> " << pdf_wimp.hEnergy->Integral("width") << " evt/ton/year " << flush;
+	cout<<"    - m_WIMP = "<< wimp_masses[i] << " GeV, " << fields[ifield] <<" V/cm and csx = "<< sigma0Si <<" cm^2  --> " << flush;
 
 	ostringstream oss;
 	oss << wimp_masses[i];
@@ -190,7 +197,7 @@ int main(int argc,char** argv){
 	
 	f->Write();
 
-	cout<<" ---- Done"<<endl;
+	cout<< pdf_wimp.hEnergy->Integral("width") << " evt/ton/year  ---- Done"<<endl;
 	
       
       }
@@ -198,7 +205,32 @@ int main(int argc,char** argv){
   }
   //----------------------------------------------------
   //----------------------------------------------------
+  if(build_DD_gun_NR){
 
+
+    
+    for(size_t ifield = 0; ifield < fields.size(); ++ifield){
+      cout<<" - Generation of DD gun NR calibration @ " << fields[ifield]<<" V/cm  "<<flush;
+      
+      ostringstream oss_field;
+      oss_field << fields[ifield];
+      string pdf_name = "dd_gun_" + oss_field.str() + "_Vcm";
+      
+      TFile* f = new TFile((output_path + "/" +pdf_name + ".root").c_str(), "RECREATE");
+      
+      PdfCollection pdf_dd(pdf_name);
+            
+      nester->GetNestedPdf(pdf_dd, N_nevent_generation, "DD", fields[ifield]);
+      
+      f->Write();
+      
+      cout<< pdf_dd.hEnergy->Integral("width") << " evt/ton/year  ---- Done"<<endl;
+	
+      
+      }
+
+  }
+  
 
   //----------------------------------------------------
   //----------------------------------------------------
@@ -208,7 +240,7 @@ int main(int argc,char** argv){
     
     for(size_t ifield = 0; ifield < fields.size(); ++ifield){
       
-      cout<<"    - @"<<fields[ifield]<<" V/cm " << pdf_neutrino_NR.hEnergy->Integral("width") << " evt/ton/year"<<flush;
+      cout<<"    - @"<<fields[ifield]<<" V/cm " <<flush;
 
       ostringstream oss_field;
       oss_field << fields[ifield];
@@ -217,13 +249,14 @@ int main(int argc,char** argv){
       
       
       NeutrinoRate* neutrino_rate = new NeutrinoRate(target, neutrino_fluxes, "All", cross_section, LUX_NR_efficiency);
+      //NeutrinoRate* neutrino_rate = new NeutrinoRate(target, neutrino_fluxes, "All", cross_section);
       PdfCollection pdf_neutrino_NR("neutrino_NR");
       neutrino_rate->GetRate(pdf_neutrino_NR.hEnergy);
       nester->GetNestedPdf(pdf_neutrino_NR, N_nevent_generation, "NR", fields[ifield]);
 
       f->Write();
       
-      cout<<" ---- Done"<<endl;
+      cout<< pdf_neutrino_NR.hEnergy->Integral("width") << " evt/ton/year"<<" ---- Done"<<endl;
 
     }
   }
@@ -239,7 +272,7 @@ int main(int argc,char** argv){
     
     for(size_t ifield = 0; ifield < fields.size(); ++ifield){
 
-      cout<<"    - @" << fields[ifield] <<"V/cm rate = "<< flat_ER_rate<<" evt/ton/y/keV --> " << pdf_flat_ER.hEnergy->Integral("width") << " evt/ton/year"<<flush;
+      cout<<"    - @" << fields[ifield] <<"V/cm rate = "<< flat_ER_rate<<" evt/ton/y/keV --> " <<flush;
     
       
       ostringstream oss_field;
@@ -260,7 +293,7 @@ int main(int argc,char** argv){
 
     f->Write();
     
-    cout<<" ---- Done"<<endl;
+    cout<< pdf_flat_ER.hEnergy->Integral("width") << " evt/ton/year ---- Done"<<endl;
 
     }
   }
