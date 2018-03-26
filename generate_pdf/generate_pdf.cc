@@ -45,6 +45,8 @@
 //#include "PdfCollection.hh"
 #include "Xe_wimp.hh"
 
+#include "ReadFromFile.hh"
+#include "Discrimination.hh"
 
 #include "NeutrinoRate.hh"
 #include "NeutrinoCrossSection_coherent_NR.hh"
@@ -56,15 +58,6 @@
 //----------------------------------------------------
 //----------------------------------------------------
 using namespace std;
-//using namespace NEST;
-
-
-//----------------------------------------------------
-//----------------------------------------------------
-//----------------------------------------------------
-//----------------------------------------------------
-
-
 
 //----------------------------------------------------
 //----------------------------------------------------
@@ -81,20 +74,21 @@ int main(int argc,char** argv){
   int N_nevent_generation = 1000000; //10000000;
   double sigma0Si = 1e-45;    // cm^2
   double low_E_th = 1;        // keV
+  double ER_rejection = 0.995;
+  double NR_rejection = (1-0.5);
+  
   
   
   //vector<double> fields = {100, 270, 350}; // V/cm
   vector<double> fields = {100}; // V/cm
-
   
   //----------------------------------------------------
   // Signal: WIMP parameters
   //----------------------------------------------------
-  bool build_wimp = true;
+  bool build_wimp = false;
   vector<double> wimp_masses = {10, 50, 100, 500, 1000};
   //vector<double> wimp_masses = {500};
   
-
 
   //----------------------------------------------------
   // Calibration: DD gun NR parameters
@@ -104,16 +98,25 @@ int main(int argc,char** argv){
   //----------------------------------------------------
   // Background: Neutrino NR parameters
   //----------------------------------------------------
-  bool build_neutrino_NR = true;
+  bool build_neutrino_NR = false;
 
   //----------------------------------------------------
   // Background: Flat ER parameters
   //----------------------------------------------------
-  bool build_flat_ER = true;
-  double flat_ER_rate = 1; // unit: Event/ton/year/keV
+  bool build_flat_ER = false;
+  double flat_ER_rate = 0.03; // unit: Event/ton/year/keV
 
+  //----------------------------------------------------
+  // Background: Rn22* parameters
+  //----------------------------------------------------
+  bool build_Rn222 = true;
+  bool build_Rn220 = true;
+  
+  string Rn222_file_name = "data_base/Rn222.txt";
+  string Rn220_file_name = "data_base/Rn220.txt";
 
-
+  //----------------------------------------------------
+  //----------------------------------------------------
   Nester* nester = new Nester("LuxRun4TB1");
   
   //----------------------------------------------------
@@ -189,15 +192,17 @@ int main(int argc,char** argv){
 
 	TFile* f = new TFile((output_path + "/" +pdf_name + ".root").c_str(), "RECREATE");
 	
-	PdfCollection pdf_wimp(pdf_name);
+	PdfCollection pdf(pdf_name);
 	
-	xe_wimp->GetRate(pdf_wimp, wimp_masses[i], sigma0Si, LUX_NR_efficiency);
+	xe_wimp->GetRate(pdf, wimp_masses[i], sigma0Si, LUX_NR_efficiency);
+
+	AddFlatDiscrimination(NR_rejection, pdf);
 	
-	nester->GetNestedPdf(pdf_wimp, N_nevent_generation, "NR", fields[ifield]);
+	nester->GetNestedPdf(pdf, N_nevent_generation, "NR", fields[ifield]);
 	
 	f->Write();
 
-	cout<< pdf_wimp.hEnergy->Integral("width") << " evt/ton/year  ---- Done"<<endl;
+	cout<< pdf.hEnergy->Integral("width") << " evt/ton/year  ---- Done"<<endl;
 	
       
       }
@@ -218,13 +223,13 @@ int main(int argc,char** argv){
       
       TFile* f = new TFile((output_path + "/" +pdf_name + ".root").c_str(), "RECREATE");
       
-      PdfCollection pdf_dd(pdf_name);
+      PdfCollection pdf(pdf_name);
             
-      nester->GetNestedPdf(pdf_dd, N_nevent_generation, "DD", fields[ifield]);
+      nester->GetNestedPdf(pdf, N_nevent_generation, "DD", fields[ifield]);
       
       f->Write();
       
-      cout<< pdf_dd.hEnergy->Integral("width") << " evt/ton/year  ---- Done"<<endl;
+      cout<< pdf.hEnergy->Integral("width") << " evt/ton/year  ---- Done"<<endl;
 	
       
       }
@@ -250,13 +255,16 @@ int main(int argc,char** argv){
       
       NeutrinoRate* neutrino_rate = new NeutrinoRate(target, neutrino_fluxes, "All", cross_section, LUX_NR_efficiency);
       //NeutrinoRate* neutrino_rate = new NeutrinoRate(target, neutrino_fluxes, "All", cross_section);
-      PdfCollection pdf_neutrino_NR("neutrino_NR");
-      neutrino_rate->GetRate(pdf_neutrino_NR.hEnergy);
-      nester->GetNestedPdf(pdf_neutrino_NR, N_nevent_generation, "NR", fields[ifield]);
+      PdfCollection pdf("neutrino_NR");
+      neutrino_rate->GetRate(pdf.hEnergy);
+
+      AddFlatDiscrimination(NR_rejection, pdf);
+      
+      nester->GetNestedPdf(pdf, N_nevent_generation, "NR", fields[ifield]);
 
       f->Write();
       
-      cout<< pdf_neutrino_NR.hEnergy->Integral("width") << " evt/ton/year"<<" ---- Done"<<endl;
+      cout<< pdf.hEnergy->Integral("width") << " evt/ton/year"<<" ---- Done"<<endl;
 
     }
   }
@@ -280,20 +288,83 @@ int main(int argc,char** argv){
       string pdf_name = "flat_ER_" + oss_field.str() + "Vcm";
       TFile* f = new TFile((output_path + "/" +pdf_name + ".root").c_str(), "RECREATE");
       
-      PdfCollection pdf_flat_ER("flat_ER");
+      PdfCollection pdf("flat_ER");
       
-      for(int i =1; i<= pdf_flat_ER.hEnergy->GetNbinsX(); ++i) {
-	double E = pdf_flat_ER.hEnergy->GetBinCenter(i);
+      for(int i =1; i<= pdf.hEnergy->GetNbinsX(); ++i) {
+	double E = pdf.hEnergy->GetBinCenter(i);
 	double rate = LUX_ER_efficiency->GetEfficiency(E) * flat_ER_rate;
-	pdf_flat_ER.hEnergy->SetBinContent(i, rate);
+	pdf.hEnergy->SetBinContent(i, rate);
 	
       }
-      
-      nester->GetNestedPdf(pdf_flat_ER, N_nevent_generation, "NR", fields[ifield]);
+      AddFlatDiscrimination(ER_rejection, pdf);
+
+      nester->GetNestedPdf(pdf, N_nevent_generation, "ER", fields[ifield]);
 
     f->Write();
     
-    cout<< pdf_flat_ER.hEnergy->Integral("width") << " evt/ton/year ---- Done"<<endl;
+    cout<< pdf.hEnergy->Integral("width") << " evt/ton/year ---- Done"<<endl;
+
+    }
+  }
+  //----------------------------------------------------
+  //----------------------------------------------------
+
+  //----------------------------------------------------
+  //----------------------------------------------------
+  if(build_Rn220){
+    cout<<"Generation of Rn220"<<endl;
+    
+    for(size_t ifield = 0; ifield < fields.size(); ++ifield){
+
+      //cout<<"    - @" << fields[ifield] <<"V/cm rate = "<< <<" evt/ton/y/keV --> " <<flush;
+    
+      
+      ostringstream oss_field;
+      oss_field << fields[ifield];
+      string pdf_name = "Rn220_ER_" + oss_field.str() + "Vcm";
+      TFile* f = new TFile((output_path + "/" +pdf_name + ".root").c_str(), "RECREATE");
+      
+      PdfCollection pdf("Rn220_ER");
+
+      ReadFromFile(Rn220_file_name, pdf);
+      AddFlatDiscrimination(ER_rejection, pdf);
+
+      nester->GetNestedPdf(pdf, N_nevent_generation, "ER", fields[ifield]);
+
+      f->Write();
+      
+      cout<< pdf.hEnergy->Integral("width") << " evt/ton/year ---- Done"<<endl;
+
+    }
+  }
+  //----------------------------------------------------
+  //----------------------------------------------------
+
+  //----------------------------------------------------
+  //----------------------------------------------------
+  if(build_Rn222){
+    cout<<"Generation of Rn222"<<endl;
+    
+    for(size_t ifield = 0; ifield < fields.size(); ++ifield){
+
+      //cout<<"    - @" << fields[ifield] <<"V/cm rate = "<< <<" evt/ton/y/keV --> " <<flush;
+    
+      
+      ostringstream oss_field;
+      oss_field << fields[ifield];
+      string pdf_name = "Rn222_ER_" + oss_field.str() + "Vcm";
+      TFile* f = new TFile((output_path + "/" +pdf_name + ".root").c_str(), "RECREATE");
+      
+      PdfCollection pdf("Rn222_ER");
+
+      ReadFromFile(Rn222_file_name, pdf);
+      AddFlatDiscrimination(ER_rejection, pdf);
+      
+      nester->GetNestedPdf(pdf, N_nevent_generation, "ER", fields[ifield]);
+
+      f->Write();
+      
+      cout<< pdf.hEnergy->Integral("width") << " evt/ton/year ---- Done"<<endl;
 
     }
   }
@@ -301,6 +372,9 @@ int main(int argc,char** argv){
   //----------------------------------------------------
 
 
+
+
+  
 
   cout<<"Done !"<<endl;
   //theApp.Run();
