@@ -34,17 +34,12 @@
 //----------------------------------------------------
 // NEST
 //----------------------------------------------------
-//#include "NEST.hh"
-//#include "detector.hh"
-//#include "detector_LUX.hh"
 #include "Nester.hh"
 
-
 //----------------------------------------------------
 //----------------------------------------------------
-//#include "PdfCollection.hh"
 #include "Xe_wimp.hh"
-
+#include "GlobalParameters.hh"
 #include "ReadFromFile.hh"
 #include "Discrimination.hh"
 
@@ -71,8 +66,8 @@ int main(int argc,char** argv){
   // General parameters
   //----------------------------------------------------
   string output_path = "pdf";
-  int N_nevent_generation = 1000000; //10000000;
-  double sigma0Si = 1e-45;    // cm^2
+  int N_nevent_generation = 10000000;
+  double sigma0Si = GlobalParameters::GetInstance()->ref_wimp_SI_cx;    // cm^2
   double low_E_th = 1;        // keV
   double ER_rejection = 0.995;
   double NR_rejection = (1-0.5);
@@ -85,7 +80,7 @@ int main(int argc,char** argv){
   //----------------------------------------------------
   // Signal: WIMP parameters
   //----------------------------------------------------
-  bool build_wimp = false;
+  bool build_wimp = true;
   vector<double> wimp_masses = {10, 50, 100, 500, 1000};
   //vector<double> wimp_masses = {500};
   
@@ -98,12 +93,12 @@ int main(int argc,char** argv){
   //----------------------------------------------------
   // Background: Neutrino NR parameters
   //----------------------------------------------------
-  bool build_neutrino_NR = false;
+  bool build_neutrino_NR = true;
 
   //----------------------------------------------------
   // Background: Flat ER parameters
   //----------------------------------------------------
-  bool build_flat_ER = false;
+  bool build_flat_ER = true;
   double flat_ER_rate = 0.03; // unit: Event/ton/year/keV
 
   //----------------------------------------------------
@@ -254,7 +249,7 @@ int main(int argc,char** argv){
       
       
       NeutrinoRate* neutrino_rate = new NeutrinoRate(target, neutrino_fluxes, "All", cross_section, LUX_NR_efficiency);
-      //NeutrinoRate* neutrino_rate = new NeutrinoRate(target, neutrino_fluxes, "All", cross_section);
+
       PdfCollection pdf("neutrino_NR");
       neutrino_rate->GetRate(pdf.hEnergy);
 
@@ -281,7 +276,6 @@ int main(int argc,char** argv){
     for(size_t ifield = 0; ifield < fields.size(); ++ifield){
 
       cout<<"    - @" << fields[ifield] <<"V/cm rate = "<< flat_ER_rate<<" evt/ton/y/keV --> " <<flush;
-    
       
       ostringstream oss_field;
       oss_field << fields[ifield];
@@ -315,9 +309,6 @@ int main(int argc,char** argv){
     cout<<"Generation of Rn220"<<endl;
     
     for(size_t ifield = 0; ifield < fields.size(); ++ifield){
-
-      //cout<<"    - @" << fields[ifield] <<"V/cm rate = "<< <<" evt/ton/y/keV --> " <<flush;
-    
       
       ostringstream oss_field;
       oss_field << fields[ifield];
@@ -346,9 +337,6 @@ int main(int argc,char** argv){
     cout<<"Generation of Rn222"<<endl;
     
     for(size_t ifield = 0; ifield < fields.size(); ++ifield){
-
-      //cout<<"    - @" << fields[ifield] <<"V/cm rate = "<< <<" evt/ton/y/keV --> " <<flush;
-    
       
       ostringstream oss_field;
       oss_field << fields[ifield];

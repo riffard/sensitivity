@@ -31,10 +31,13 @@ struct PdfCollection{
     h2_s1_logs2s1 = new TH2D( Form("s1_logs1s2_%s", pdf_name.c_str()), "", param->s1_nbins, 0, param->s1_max, param->logs2s1_nbins, param->logs2s1_min, param->logs2s1_max);
     
     */
-    if(param->is_E_log_scale)
+    if(param->is_E_log_scale){
       hEnergy = new TH1D("E", "", param->E_nbins, param->E_log_scale_bins);
-    else
+      hEnergy_keVee  = new TH1D("E_keVee", "", param->E_nbins, param->E_log_scale_bins);
+    }else{
       hEnergy = new TH1D("E", "", param->E_nbins, 0, param->E_max);
+      hEnergy_keVee = new TH1D("E_keVee", "", param->E_nbins, 0, param->E_max);
+    }
     
     hs1 = new TH1D("s1", "", param->s1_nbins, 0, param->s1_max);
     hs2 = new TH1D("s2", "", param->s2_nbins, 0, param->s2_max);
@@ -51,8 +54,8 @@ struct PdfCollection{
 
   
   
-  TH1D* hEnergy, *hs1, *hs2, *htdrift;
-  TH2D* h2_s1_s2, *h2_s1_logs2s1;
+  TH1D *hEnergy, *hEnergy_keVee, *hs1, *hs2, *htdrift;
+  TH2D *h2_s1_s2, *h2_s1_logs2s1;
 
   
 

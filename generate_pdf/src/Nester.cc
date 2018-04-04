@@ -10,6 +10,7 @@ Nester::Nester(string detector_name){
 
   fDetectorName = detector_name;
 
+  NESTcalc();
 
   if(fDetectorName ==  "LuxRun3")  InitLuxRun3();
   else if(fDetectorName == "LuxRun4TB1")  InitLuxRun4TB1();
@@ -22,10 +23,10 @@ Nester::Nester(string detector_name){
   }
 
 
-  fNEST = NEST::NESTcalc();
-
+ 
   fSeed = 0;
-  fNEST.SetRandomSeed(fSeed);
+  //fNEST.SetRandomSeed(fSeed);
+  SetRandomSeed(fSeed);
 
   frho = -1;
   fdvD = -1;
@@ -382,7 +383,8 @@ void Nester::GetNestedPdf(PdfCollection& pdfs, int Nevent, string pt, double fie
 
     if(i % 100000 == 0){
       fSeed ++ ;
-      fNEST.SetRandomSeed(fSeed);
+      //fNEST.SetRandomSeed(fSeed);
+      SetRandomSeed(fSeed);
     }
     
     double energy = 0;
@@ -390,26 +392,36 @@ void Nester::GetNestedPdf(PdfCollection& pdfs, int Nevent, string pt, double fie
 
       double eMin = 0;
       double eMax = 100;
-      energy = DD_spectrum(eMin, eMax, fNEST);
-
+      //energy = DD_spectrum(eMin, eMax);
+      energy = 1;
       pdfs.hEnergy->Fill(energy);
       
     }else energy = pdfs.hEnergy->GetRandom();
 
-    double pos_z = ( dz_min + ( dz_max - dz_min ) * fNEST.rand_uniform() ) * 0.1; //cm
+    double pos_z = ( dz_min + ( dz_max - dz_min ) * rand_uniform() ) * 0.1; //cm
+
+    int massNum = 54;
+    int atomNum = 131;
     
-    NEST::YieldResult yields = fNEST.GetYields(type_num, energy, frho, field);
-    NEST::QuantaResult quanta = fNEST.GetQuanta(yields, frho);
-    vector<double> scint_s1 = GetS1(quanta.photons,pos_z);
+    NEST::YieldResult yields = GetYields(type_num, energy, frho, field,double(massNum),double(atomNum));
+    NEST::QuantaResult quanta = GetQuanta(yields, frho);
+    vector<double> scint_s1 = GetS1(quanta.photons,pos_z, fdvD);
     vector<double> scint_s2 = GetS2(quanta.electrons,driftTime);
     
     double drift = pos_z/fdvD;
     double S1 = scint_s1[2];
     double S1c = scint_s1[5];
+    double g1_c = scint_s1[8];
     
     double S2 = scint_s2[4];
     double S2c = scint_s2[7];
+    double g2_c = scint_s2[8];
+    double W = 13.7e-3; //keV
+
     
+    double E_keVee = W * (S1c/g1_c + S2c/g2_c);
+    
+    pdfs.hEnergy_keVee ->Fill(E_keVee);
     pdfs.hs1->Fill(S1c);
     pdfs.hs2->Fill(S2c);
     pdfs.htdrift->Fill(drift);
@@ -421,12 +433,12 @@ void Nester::GetNestedPdf(PdfCollection& pdfs, int Nevent, string pt, double fie
   //Spectra normalization
   
   double Total_rate = pdfs.hEnergy->Integral("width");
-  
-  pdfs.hs1->Scale(Total_rate / pdfs.hs1->Integral("width"));
-  pdfs.hs2->Scale(Total_rate / pdfs.hs2->Integral("width"));
-  pdfs.htdrift->Scale(Total_rate / pdfs.htdrift->Integral("width"));
-  pdfs.h2_s1_s2->Scale(Total_rate / pdfs.h2_s1_s2->Integral("width"));
-  pdfs.h2_s1_logs2s1->Scale(Total_rate / pdfs.h2_s1_logs2s1->Integral("width"));
+  pdfs.hEnergy_keVee->Scale(Total_rate / pdfs.hEnergy_keVee->Integral("width"), "nosw2");
+  pdfs.hs1->Scale(Total_rate / pdfs.hs1->Integral("width"),"nosw2");
+  pdfs.hs2->Scale(Total_rate / pdfs.hs2->Integral("width"), "nosw2");
+  //pdfs.htdrift->Scale(Total_rate / pdfs.htdrift->Integral("width"), "nosw2");
+  //pdfs.h2_s1_s2->Scale(Total_rate / pdfs.h2_s1_s2->Integral("width"), "nosw2");
+  //pdfs.h2_s1_logs2s1->Scale(Total_rate / pdfs.h2_s1_logs2s1->Integral("width"), "nosw2");
   
   
 }

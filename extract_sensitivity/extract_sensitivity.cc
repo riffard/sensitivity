@@ -37,6 +37,24 @@
 #include "RooHistPdf.h"
 #include "RooDataSet.h"
 #include "RooFitResult.h"
+#include "RooWorkspace.h"
+
+#include "RooStats/AsymptoticCalculator.h"
+#include "RooStats/HybridCalculator.h"
+#include "RooStats/FrequentistCalculator.h"
+#include "RooStats/ToyMCSampler.h"
+#include "RooStats/HypoTestPlot.h"
+#include "RooStats/SamplingDistPlot.h"
+#include "RooStats/NumEventsTestStat.h"
+#include "RooStats/ProfileLikelihoodTestStat.h"
+#include "RooStats/SimpleLikelihoodRatioTestStat.h"
+#include "RooStats/RatioOfProfiledLikelihoodsTestStat.h"
+#include "RooStats/MaxLikelihoodEstimateTestStat.h"
+#include "RooStats/NumEventsTestStat.h"
+#include "RooStats/HypoTestInverter.h"
+#include "RooStats/HypoTestInverterResult.h"
+#include "RooStats/HypoTestInverterPlot.h"
+
 
 #include "Math/PdfFuncMathCore.h"
 
@@ -45,197 +63,277 @@
 #include "GlobalParameters.hh"
 #include "ModelBuilder.hh"
 #include "Style.hh"
+#include "HomeMadePLR.hh"
 
+#include "ConfigReader.hh"
 //----------------------------------------------------
 //----------------------------------------------------
 
 using namespace std;
+using namespace RooFit;
+using namespace RooStats;
+
+void PrintWelcome(){
+
+  cout<<"------------------------------------------------------------"<<endl;
+  cout<<" _     _   _                     _       _                  "<<endl;
+  cout<<"|_)|  |_) | \\ __|_ _  __|_ _ __ |_)_ ___|__ ____  _ __  _ _ "<<endl;
+  cout<<"|  |__| \\ |_/(/_|_(/_(_ |_(_)|  | (/_|  |(_)| |||(_|| |(_(/_"<<endl;
+  cout<<"------------------------------------------------------------"<<endl;
+  cout<<"------------------------------------------------------------"<<endl;
+  cout<<"Dev: Q.Riffard (qriffard@lbl.gov)"<<endl;
+  cout<<"------------------------------------------------------------"<<endl;
+  
+}
+
+void PrintHelp(){
+
+  cout<<"------------------------------------------------------------"<<endl;
+  cout<<"Wrong usage of the software !"<<endl;
+  cout<<"Usage:"<<endl;
+  cout<<"   ./extract_sensitivity.bin -c config_filename -m wimp_mass"<<endl;
+  cout<<"Arguments:"<<endl;
+  cout<<" - c: set the config file"<<endl;
+  cout<<" - m: set the WIMP mass"<<endl;
+  cout<<" - f: set the electric field"<<endl;
+  cout<<" - b: enable the batch mode (optional)"<<endl;
+  cout<<"------------------------------------------------------------"<<endl;
+  exit(1);
+}
+
 
 //----------------------------------------------------
 //----------------------------------------------------
 int main(int argc,char** argv){
+  
+  //----------------------------------------------------
+  //----------------------------------------------------
+  PrintWelcome();
   LoadStyle();
+
+  string config_file = "";
+  string Wimp_mass = "";
+  string electric_field = "";
+  bool batch_mode = false;
+  
+  int i=1;
+  while(i < argc){
+
+    if((string)argv[i] == "-c"){
+      config_file = argv[i+1];
+      i++;
+    }else if((string)argv[i] == "-m"){
+      Wimp_mass =  argv[i+1];
+      i++;
+    }else if((string)argv[i] == "-f"){
+      electric_field =  argv[i+1];
+      i++;
+    }else if((string)argv[i] == "-b"){
+      batch_mode = true;
+    }
+      
+    i++;
+  }
+
+  
+  
+  if(config_file == "" || Wimp_mass == "" || electric_field == "") PrintHelp();
+  
+
+  if(batch_mode) gROOT->SetBatch();
+  
+  //----------------------------------------------------
+  //----------------------------------------------------
+  
+  ConfigReader cfg(config_file);
   //----------------------------------------------------
   //----------------------------------------------------
   TApplication theApp("App", &argc, argv);
 
-  double TotalExpousre = 1; // ton.year
-  int N_pseudo_exp = 400;
-  int vervose_level = -1;
-  //vector<double> sigma_test = {0, 5, 10, 20, 25, 30};
-  vector<double> sigma_test = {0, 5, 10, 20, 22, 25, 30, 40};
-  //vector<double> sigma_test = {0, 5};
-
-  vector<vector<double>> q_collection;
-  
-  vector<TH1D*> hq;
-  for(size_t i=0; i< sigma_test.size(); ++i){
-    hq.push_back(new TH1D("","",100,-1,10));
-
-    q_collection.push_back(vector<double> ());
-
-  }
-  TH1D* hmu_estimator = new TH1D("","",10000,-10, 40);
-  
-  
   //----------------------------------------------------
   // Global parameters
   //----------------------------------------------------  
   GlobalParameters* parameters = GlobalParameters::GetInstance();
+  
+  //----------------------------------------------------
+  // Model parameters
+  //----------------------------------------------------
+  const double TotalExpousre = cfg.Get_TotalExpousre(); // ton.year
+  const bool UseNuisanceParam = cfg.Get_UseNuisanceParam();
+  
+  //----------------------------------------------------
+  // PLR parameters
+  //----------------------------------------------------
+  const int N_pseudo_exp = cfg.Get_N_pseudo_exp();
+  const int vervose_level = cfg.Get_vervose_level();
+
+  const double p_value_target = cfg.Get_p_value_target(); 
+  const double p_value_tolerence = cfg.Get_p_value_tolerence();
+  
+  //----------------------------------------------------
+  // Scaning mode
+  //----------------------------------------------------
+  //const ScaningMode scaningMode = Dichotomy;
+  const ScaningMode scaningMode = cfg.Get_scaningMode();
+  
+  const double ref_cross_section = parameters->ref_wimp_SI_cx;
+  
+  const double grid_cross_section_start = ref_cross_section;
+  const double grid_cross_section_end = cfg.Get_grid_cross_section_end();
+  const int grid_Nsteps = cfg.Get_grid_Nsteps();
+
+  const double dico_cross_section_start = ref_cross_section;
+  const int dico_Nsteps_max = cfg.Get_dico_Nsteps_max();
+  double dico_cross_section_step = 0.5*ref_cross_section;
+
+
+  ostringstream oss;
+  oss << N_pseudo_exp ;
+  string output_filename = "PLR_results_" + Wimp_mass + "GeV_" + electric_field + "Vcm_"+ oss.str() +"Exp.root";
+
+  TFile* f = new TFile(output_filename.c_str(), "RECREATE");
+
+  cout<<"------------------------------------------------------------"<<endl;
+  cout<<"Calculation parametes:"<<endl;
+  cout<<"------------------------------------------------------------"<<endl;
+  
+  
+  //----------------------------------------------------
+  // Preparation of the scaning grid
+  //----------------------------------------------------  
+  vector<double> scaning_grid;
+ 
+  if(scaningMode == Grid){
+
+    double log_start = log10(grid_cross_section_start);
+    double log_end = log10(grid_cross_section_end);
+    double log_step = (log_end - log_start) / double(grid_Nsteps);
+
+    for(double log_cx = log_start; log_cx >= log_end; log_cx += log_step)
+      scaning_grid.push_back( pow(10, log_cx) );
+    
+  }else if(scaningMode == Dichotomy){
+    scaning_grid.push_back(dico_cross_section_start);
+  }
+  
+  const int MaxStep = scaningMode == Grid ? scaning_grid.size() : dico_Nsteps_max;
+
+
+ 
+  
+  //----------------------------------------------------
+  // Output
+  //----------------------------------------------------
+  vector<HomeMadePLRData> plrData;  
+    
+  TGraph* gr_pvalue = new TGraph();
+  TGraph* gr_pvalue_inv = new TGraph();
+  
+  
+  //----------------------------------------------------
+  //----------------------------------------------------
+  RooWorkspace *w = new RooWorkspace("w");
 
   //----------------------------------------------------
-  // Set the observables variables
   //----------------------------------------------------
-  RooRealVar E_recoil("E_recoil","E_recoil",parameters->E_min, 100) ;
+  RooRealVar exposure("exposure","exposure [t.y]",TotalExpousre);
+  w->import(exposure);
+  
   RooRealVar s1("s1", "s1 [npe]", 0, parameters->s1_max) ;
-  RooRealVar s2("s2", "s2", 0, parameters->s2_max) ;
+  w->import(s1);
+    
   RooRealVar logs2s1("logs2s1", "logs2s1", parameters->logs2s1_min, parameters->logs2s1_max) ;
+  w->import(logs2s1);
 
-  map<string, RooRealVar* > variables;
-  variables["E_recoil"] = &E_recoil;
-  variables["s1"]       = &s1;
-  variables["s2"]       = &s2;
-  variables["logs2s1"]  = &logs2s1;
+  //----------------------------------------------------
+  //---------------------------------------------------
+  ModelBuilder* model = new ModelBuilder(w, "Model", TotalExpousre, "s1_logs1s2", "s1,logs2s1");
+  
+  model->AddComponant(ModelBuilder::Background, "NR_neutrino", Form("../generate_pdf/pdf/neutrino_NR_%s_Vcm.root", electric_field.c_str()));  
+  model->AddComponant(ModelBuilder::Background, "Rn222", Form("../generate_pdf/pdf/Rn222_ER_%sVcm.root", electric_field.c_str()));
+  model->AddComponant(ModelBuilder::Background, "Rn220", Form("../generate_pdf/pdf/Rn220_ER_%sVcm.root", electric_field.c_str()));
+  
+  model->AddComponant(ModelBuilder::Signal, "wimp", Form("../generate_pdf/pdf/wimp_%s_GeV_%s_Vcm.root",Wimp_mass.c_str(), electric_field.c_str()));
 
-  string analysis_variables = "s1,logs1s2";
+  //----------------------------------------------------
+  //----------------------------------------------------
+  model->BuildModel(UseNuisanceParam);
 
-  //ModelBuilder* signal = new ModelBuilder("Signal", analysis_variables, &variables);
-  //signal->AddComponant("wimp","../generate_pdf/pdf/wimp_100_GeV_100_Vcm.root", "s1_logs1s2", RooArgList(s1, logs2s1));  
-  //signal->BuildPdf();
-  //RooAddPdf* sinal_pdf = signal->GetPdf();
 
-  ModelBuilder* background = new ModelBuilder("Background", analysis_variables,  &variables);
-  background->AddComponant("NR_neutrino","../generate_pdf/pdf/neutrino_NR_100_Vcm.root", "s1_logs1s2", RooArgList(s1, logs2s1));
-  background->AddComponant("ER_Flat", "../generate_pdf/pdf/flat_ER_100Vcm.root", "s1_logs1s2", RooArgList(s1, logs2s1));
-  background->AddComponant("wimp","../generate_pdf/pdf/wimp_100_GeV_100_Vcm.root", "s1_logs1s2", RooArgList(s1, logs2s1));
-  background->BuildPdf();
-
-  RooAddPdf* background_pdf = background->GetPdf();
-
+  //----------------------------------------------------
+  //----------------------------------------------------
   RooMsgService::instance().getStream(1).removeTopic(RooFit::Minimization);
   RooMsgService::instance().getStream(1).removeTopic(RooFit::DataHandling);
+  RooMsgService::instance().getStream(1).removeTopic(RooFit::InputArguments);
+
   
-  cout<<endl<<"Start pseudo experiments"<<endl<<endl;;
+  //----------------------------------------------------
+  //----------------------------------------------------
+  HomeMadePLR* plr = new HomeMadePLR(w);
+
+
+  //----------------------------------------------------
+  //----------------------------------------------------
+
+  int n_scaning = scaning_grid.size();
   
-  for(int n =0; n <N_pseudo_exp; ++n){
+  for(size_t i=0; i < n_scaning && i < MaxStep; ++i){
 
-    cout << n+1 << " / " << N_pseudo_exp << endl;
-       
-    //----------------------------------------------------
-    // Generate data without WIMP
-    //----------------------------------------------------
-    background->GetAmplitude("wimp")->setVal(0);
-    RooDataSet *dataBkgOnly = background->GenerateFakeData(TotalExpousre, RooArgList(s1, logs2s1));
-
-    //----------------------------------------------------
-    // Fit un constrain Likelyhood
-    //----------------------------------------------------    
-    background->GetAmplitude("wimp")->setConstant(kFALSE);
-    RooFitResult* fit_unconstrain = background_pdf->fitTo(*dataBkgOnly,
-							  RooFit::Extended(kTRUE),
-							  RooFit::PrintLevel(vervose_level),
-							  RooFit::Save());
-
-    hmu_estimator->Fill(background->GetAmplitude("wimp")->getVal());
-
-    double lnL_unconstrain = fit_unconstrain->minNll();
+    cout<<"i = "<<i<<endl;
     
-    //----------------------------------------------------
-    // Loop over all the test cross sections
-    //----------------------------------------------------
-    for(size_t i = 0 ; i< sigma_test.size(); i++){
-      
-      background->GetAmplitude("wimp")->setVal(sigma_test[i]);
-      background->GetAmplitude("wimp")->setConstant(kTRUE);
-      RooFitResult* fit_constrain = background_pdf->fitTo(*dataBkgOnly,
-							  RooFit::Extended(kTRUE),
-							  RooFit::PrintLevel(vervose_level),
-							  RooFit::Save());
-      
-      double lnL_constrain = fit_constrain->minNll();
-      
+    f->cd();
+    double test_cross_section = scaning_grid[i];
+    
+    string name = Form("%e", test_cross_section);
+    plrData.push_back(HomeMadePLRData (name));   
 
-      double q = 2*(lnL_constrain - lnL_unconstrain);
-      
+    double multiplicator = test_cross_section / ref_cross_section; 
+    
+    plr->Process(N_pseudo_exp, multiplicator, plrData[i]);
+    
+    double p_value = plrData[i].GetPValue();
+    gr_pvalue->SetPoint(gr_pvalue->GetN(), test_cross_section, p_value);
+    gr_pvalue_inv->SetPoint(gr_pvalue_inv->GetN(), p_value, test_cross_section);
 
-      hq[i]->Fill(q);
-      q_collection[i].push_back(q);
+  
+    if(scaningMode == Grid) continue;
+    
+    double dist_to_target = abs(p_value_target - p_value);
+    
+    if(dist_to_target < p_value_tolerence ){
+      cout<<"Optimium found!! "<< p_value << " target: "<< p_value_target <<" ("<<dist_to_target<<")"<<endl;
+      break;
     }
-    //----------------------------------------------------
-    //----------------------------------------------------
-
-  }
-
-  TGraph* gr_chi2 = new TGraph();
-  gr_chi2->SetLineColor(12);
-  gr_chi2->SetLineWidth(3);
-  for(int b=1; b<=hq[0]->GetNbinsX(); b++){
-    double x = hq[0]->GetBinCenter(b);
-    gr_chi2->SetPoint(gr_chi2->GetN(), x , ROOT::Math::chisquared_pdf(x,1));
-  }
-  
-  
-  
-  vector<double> median_collection;
-  for(size_t i = 0 ; i< sigma_test.size(); i++){
-    median_collection.push_back(TMath::Median(q_collection[i].size(), &q_collection[i][0]));
-    hq[i]->Scale(1/hq[i]->Integral("width"));
-
-    for(int b=1; b<=hq[i]->GetNbinsX(); b++) hq[i]->SetBinError(b, 0);
     
-  }
-      
-  hq[0]->SetLineWidth(3);
-  hq[0]->SetLineColor(10);
-  hq[0]->SetFillColorAlpha(10, 0.5);
+    if(p_value > p_value_target && dico_cross_section_step > 0){
+      dico_cross_section_step = -dico_cross_section_step/2.;
+    }else if(p_value < p_value_target && dico_cross_section_step < 0){
+      dico_cross_section_step = -dico_cross_section_step/2.;
+    }
 
-  TLine* line = new TLine();
-  line->SetLineWidth(3);
-
-  TGraph* gr_pvalue = new TGraph();
-  
-  for(size_t i =1; i< sigma_test.size(); ++i){
-
-
-    int bin_median = hq[0]->GetXaxis()->FindBin(median_collection[i]);
-    gr_pvalue->SetPoint(gr_pvalue->GetN(), sigma_test[i], hq[0]->Integral(bin_median, hq[0]->GetNbinsX(), "width"));
+    scaning_grid.push_back( scaning_grid.back() - dico_cross_section_step);
 
     
-    hq[i]->SetLineWidth(3);
-    hq[i]->SetLineColor(11);
-    hq[i]->SetFillColorAlpha(11, 0.5);
-
+    n_scaning = scaning_grid.size();
     
-    THStack* hs = new THStack;
-    hs->Add(hq[i]);
-    hs->Add(hq[0]);
-    
-    TCanvas* c = new TCanvas;
-    hs->Draw("nostack");
-    gr_chi2->Draw("samel");
-    hs->SetTitle("");
-    c->SetLogy();
-
-    line->DrawLine(median_collection[i], 0, median_collection[i], hq[i]->GetMaximum());
-
-    c->Update();
   }
-  
-  //hq->Draw();
 
-  TCanvas* c = new TCanvas;
-  hmu_estimator->Draw();
-  c->Update();
+  gr_pvalue->Write("pvalue");
+  gr_pvalue_inv->Write("pvalue_inv");
   
-  
-  gr_pvalue->SetMarkerStyle(21);
-  c = new TCanvas;
-  gr_pvalue->Draw("apl");
-  c->Update();
-  
+  f->Write();
+  f->Close();
   
   cout<<"Done "<<endl;
-  theApp.Run();
+
+  if(!batch_mode) theApp.Run();
+  
 
   
+
+
+
+
+
+
 } 

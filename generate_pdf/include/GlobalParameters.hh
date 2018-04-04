@@ -23,6 +23,8 @@ private:
   
 public:
 
+  static const double ref_wimp_SI_cx;
+  
   static const int    E_nbins;
   static const double E_min;
   static const double E_max;

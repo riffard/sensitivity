@@ -20,6 +20,8 @@ GlobalParameters::GlobalParameters(){
 
 GlobalParameters* GlobalParameters::instance = nullptr;
 
+const double GlobalParameters::ref_wimp_SI_cx = 1e-45;
+
 const bool   GlobalParameters::is_E_log_scale = true;
 const int    GlobalParameters::E_nbins = 1000;
 const double GlobalParameters::E_min = GlobalParameters::is_E_log_scale ?  1e-4: 0; // Only in log scale mode
