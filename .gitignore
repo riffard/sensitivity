@@ -7,3 +7,5 @@ cmake_install.cmake
 lib
 *.bin
 *.so
+*_C.d
+*C_ACLiC_dict_rdict.pcm
