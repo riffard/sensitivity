@@ -38,17 +38,19 @@
 
 //----------------------------------------------------
 //----------------------------------------------------
-#include "Xe_wimp.hh"
+//#include "Xe_wimp.hh"
 #include "GlobalParameters.hh"
 #include "ReadFromFile.hh"
 #include "Discrimination.hh"
 
+#include "WimpRate.hh"
 #include "NeutrinoRate.hh"
 #include "NeutrinoCrossSection_coherent_NR.hh"
 #include "NeutrinoFlux.hh"
 
 #include "DetectorEfficiency_ER_LUX_Run3.hh"
 #include "DetectorEfficiency_NR_LUX_Run3.hh"
+
 
 //----------------------------------------------------
 //----------------------------------------------------
@@ -83,6 +85,16 @@ int main(int argc,char** argv){
   bool build_wimp = true;
   vector<double> wimp_masses = {10, 50, 100, 500, 1000};
   //vector<double> wimp_masses = {500};
+
+
+  //-------------------------------------------------------------------------
+  // Halo model & parameters
+  //-------------------------------------------------------------------------
+  double v0 = 220; /*km.s-1*/
+  double vesc = 554; /*km.s-1*/
+  double sig0 = v0/sqrt(2.);
+  
+  HaloModel* halo = new HaloModel(v0,sig0 ,vesc, "SMH");
   
 
   //----------------------------------------------------
@@ -150,15 +162,23 @@ int main(int argc,char** argv){
   
   
   //----------------------------------------------------
-  // Neutrino fluxes
+  // WIMP rate
   //----------------------------------------------------
-  NeutrinoFlux* neutrino_fluxes = new NeutrinoFlux();
+  WimpRate* wimpRate = new WimpRate("wimp_calc", target, halo, LUX_NR_efficiency);
+  
   
   //----------------------------------------------------
-  // Neutrino cross section
+  // Neutrino Claculator parameters
   //----------------------------------------------------
-  NeutrinoCrossSection_coherent_NR* cross_section = new NeutrinoCrossSection_coherent_NR;
-    
+  // Neutrino fluxes
+  NeutrinoFlux* neutrino_fluxes = new NeutrinoFlux();
+  
+  // Neutrino cross section
+  NeutrinoCrossSection_coherent_NR* cross_section = new NeutrinoCrossSection_coherent_NR;    
+
+  // Neutrino rate calculator
+  NeutrinoRate* neutrino_rate = new NeutrinoRate(target, neutrino_fluxes, "All", cross_section, LUX_NR_efficiency);
+
   
   //----------------------------------------------------
   // Create the output director
@@ -172,7 +192,7 @@ int main(int argc,char** argv){
 
     cout<<"Generation of WIMP NR signal"<<endl;
 
-    Xe_wimp* xe_wimp = new Xe_wimp(target);
+    //Xe_wimp* xe_wimp = new Xe_wimp(target);
 
     for(size_t i=0; i<wimp_masses.size(); ++i){
       for(size_t ifield = 0; ifield < fields.size(); ++ifield){
@@ -189,7 +209,7 @@ int main(int argc,char** argv){
 	
 	PdfCollection pdf(pdf_name);
 	
-	xe_wimp->GetRate(pdf, wimp_masses[i], sigma0Si, LUX_NR_efficiency);
+	wimpRate->GetRate(pdf.hEnergy, wimp_masses[i], sigma0Si);
 
 	AddFlatDiscrimination(NR_rejection, pdf);
 	
@@ -231,7 +251,6 @@ int main(int argc,char** argv){
 
   }
   
-
   //----------------------------------------------------
   //----------------------------------------------------
   if(build_neutrino_NR){
@@ -248,8 +267,6 @@ int main(int argc,char** argv){
       TFile* f = new TFile((output_path + "/" +pdf_name + ".root").c_str(), "RECREATE");
       
       
-      NeutrinoRate* neutrino_rate = new NeutrinoRate(target, neutrino_fluxes, "All", cross_section, LUX_NR_efficiency);
-
       PdfCollection pdf("neutrino_NR");
       neutrino_rate->GetRate(pdf.hEnergy);
 
