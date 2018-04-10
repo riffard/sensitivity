@@ -10,8 +10,14 @@ cmake_minimum_required(VERSION 2.6)
 project(SoftAnalysis)
 
 ###############        Root include/lib dir        #####################
-find_package(ROOT REQUIRED MathMore)
+find_package(ROOT COMPONENTS RooStats MathCore)
+IF(NOT ${ROOT_FOUND})
+	message("Root not found... Let's try an other way ;)")
+	include($ENV{ROOTSYS}/etc/root/cmake/FindROOT.cmake)
+ENDIF()
+
 include_directories(${ROOT_INCLUDE_DIRS})
+
 link_directories( ${ROOT_LIBRARY_DIR})
 ########################################################################
 
@@ -22,12 +28,9 @@ include_directories(${NEST_INCLUDE_DIRS}/include)
 
 
 ###############     dm_calc include/lib dir        #####################
-include_directories ($ENV{TOOLS_PATH}/model_wimp/include)
-include_directories ($ENV{TOOLS_PATH}/background/include)
-include_directories ($ENV{TOOLS_PATH}/common/include)
-include_directories ($ENV{TOOLS_PATH}/Detectors/include)
+find_package(dm_calc REQUIRED)
+include_directories("${dm_calc_INCLUDE_DIRS}")
 
-link_directories($ENV{TOOLS_PATH}/lib)
 ########################################################################
 
 
@@ -114,7 +117,7 @@ foreach( testsourcefile ${APP_SOURCES} )
 
     add_executable( ${testname} ${testsourcefile}  ${sources} ${headers})
 
-    target_link_libraries( ${testname} ${ROOT_LIBRARIES}  dm_calc ${NEST_LIBRARIES}  )
+    target_link_libraries( ${testname} ${ROOT_LIBRARIES} ${dm_calc_LIBRARIES} ${NEST_LIBRARIES}  )
     
 endforeach( testsourcefile ${APP_SOURCES} )
 ########################################################################
