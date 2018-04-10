@@ -38,7 +38,6 @@
 
 //----------------------------------------------------
 //----------------------------------------------------
-//#include "Xe_wimp.hh"
 #include "GlobalParameters.hh"
 #include "ReadFromFile.hh"
 #include "Discrimination.hh"
