@@ -398,6 +398,8 @@ void Nester::GetNestedPdf(PdfCollection& pdfs, int Nevent, string pt, double fie
       
     }else energy = pdfs.hEnergy->GetRandom();
 
+    double pos_x = 0;
+    double pos_y = 0;
     double pos_z = ( dz_min + ( dz_max - dz_min ) * rand_uniform() ) * 0.1; //cm
 
     int massNum = 54;
@@ -405,8 +407,8 @@ void Nester::GetNestedPdf(PdfCollection& pdfs, int Nevent, string pt, double fie
     
     NEST::YieldResult yields = GetYields(type_num, energy, frho, field,double(massNum),double(atomNum));
     NEST::QuantaResult quanta = GetQuanta(yields, frho);
-    vector<double> scint_s1 = GetS1(quanta.photons,pos_z, fdvD);
-    vector<double> scint_s2 = GetS2(quanta.electrons,driftTime);
+    vector<double> scint_s1 = GetS1(quanta.photons, pos_x, pos_y, pos_z, fdvD);
+    vector<double> scint_s2 = GetS2(quanta.electrons, pos_x, pos_y, driftTime);
     
     double drift = pos_z/fdvD;
     double S1 = scint_s1[2];
